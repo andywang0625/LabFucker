@@ -1,6 +1,6 @@
 # the Lab Fucker
 
-## The lab fucker is a great(fake) tool to save your lab and exam.
+## The lab fucker is a great(fake) tool to save your labs and exams.
 
 ```bash
 chmod -x labfucker.sh
