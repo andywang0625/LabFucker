@@ -83,6 +83,106 @@ installLAMP(){
 	systemctl status php7.0-fpm.service
 }
 
+setupSSC(){
+	FQDN=$(hostname -f)
+	echo $FQDN
+	openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/ssl/private/nginx-selfsigned-${1}.key -out /etc/ssl/certs/nginx-selfsigned-${1}.crt
+	chown -R www-data:www-data "/etc/ssl/private/"
+	chown -R www-data:www-data "/etc/ssl/certs/"
+	rm -f /etc/nginx/snippets/self-signed-${1}.conf
+	touch /etc/nginx/snippets/self-signed-${1}.conf
+	cat > /etc/nginx/snippets/self-signed-${1}.conf <<EOF
+ssl_certificate /etc/ssl/certs/nginx-selfsigned-${1}.crt;
+ssl_certificate_key /etc/ssl/private/nginx-selfsigned-${1}.key;
+EOF
+	rm -f /etc/nginx/snippets/ssl-params.conf
+	touch /etc/nginx/snippets/ssl-params.conf
+	cat > /etc/nginx/snippets/ssl-params.conf <<'EOF'
+ssl_protocols TLSv1.2;
+
+ssl_prefer_server_ciphers on;
+
+ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384;
+
+ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+
+ssl_session_timeout  10m;
+
+ssl_session_cache shared:SSL:10m;
+
+ssl_session_tickets off; # Requires nginx >= 1.5.9
+
+ssl_stapling on; # Requires nginx >= 1.3.7
+
+ssl_stapling_verify on; # Requires nginx => 1.3.7
+
+resolver 8.8.8.8 8.8.4.4 valid=300s;
+
+resolver_timeout 5s;
+
+add_header X-Frame-Options DENY;
+
+add_header X-Content-Type-Options nosniff;
+
+add_header X-XSS-Protection "1; mode=block";
+
+
+
+EOF
+	mv /etc/nginx/sites-available/${1}.conf /etc/nginx/sites-available/${1}.conf.bak
+	touch /etc/nginx/sites-available/${1}.conf
+	cat > /etc/nginx/sites-available/${1}.conf <<EOF
+upstream php {
+	server unix:/run/php/php7.0-fpm.sock;
+}
+server {
+    listen 443 ssl;
+	listen [::]:443 ssl;
+    include snippets/self-signed-${1}.conf;
+    include snippets/ssl-params.conf;
+    server_name $FQDN;
+    root /var/www/${1};
+    index index.php;
+EOF
+	cat >> /etc/nginx/sites-available/${1}.conf <<'EOF'
+    location = /favicon.ico {
+		log_not_found off;
+        access_log off;
+    }
+    location = /robots.txt {
+        allow all;
+        log_not_found off;
+        access_log off;
+    }
+    location / {
+         try_files $uri $uri/ /index.php?$args;
+    }
+    location ~ \.php$ {
+        include fastcgi.conf;
+        fastcgi_intercept_errors on;
+        fastcgi_pass php;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico)$ {
+        expires max;
+        log_not_found off;
+    }
+}
+EOF
+	cat >> /etc/nginx/sites-available/${1}.conf <<EOF
+server{
+	listen 80 default_server;
+	server_name $FQDN;
+EOF
+	cat >> /etc/nginx/sites-available/${1}.conf <<'EOF'
+	return 302 https://$server_name$request_uri;
+}
+EOF
+	systemctl restart nginx.service
+	systemctl status nginx.service
+}
+
 while :
 do
 	printMenu
@@ -97,6 +197,10 @@ do
     elif [ $opti == 2 ]
     then
         installWP
+	elif [ $opti == 3 ]
+	then
+		read -p "Name of nginx conf file:" nginxCFILE
+		setupSSC $nginxCFILE
     elif [ $opti == "9999" ]
     then
         read -p "Fuck everything up?(y/N)" fuckQ
