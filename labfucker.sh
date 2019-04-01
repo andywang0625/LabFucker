@@ -8,6 +8,8 @@ printMenu(){
 	echo "1. Install lnmp"
 	echo "2. Install wordpress (Install lnmp first!)"
     echo "3. Add self-signed cert"
+    echo "4. Actvite UFW and allow 443, 80 and 22"
+    echo "5. Deny an IP to a port"
 	echo "0. Exit"
 	echo "9999. FUCK EVERYTHING UP"
 	echo -e "\033[44;37;5m ========================== \033[0m"
@@ -201,6 +203,18 @@ do
 	then
 		read -p "Name of nginx conf file:" nginxCFILE
 		setupSSC $nginxCFILE
+	elif [ $opti == 4 ]
+	then
+		sudo apt install ufw -y
+		sudo ufw allow ssh
+		sudo ufw allow http
+		sudo ufw allow https
+		sudo ufw enable
+	elif [ $opti == 5 ]
+	then
+		read -p "IP:" ipADD
+		read -p "Port:" PortN
+		sudo ufw deny from $ipADD to any port $PortN
     elif [ $opti == "9999" ]
     then
         read -p "Fuck everything up?(y/N)" fuckQ
